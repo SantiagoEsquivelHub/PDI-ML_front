@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  iris-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    container_name: iris-classifier-frontend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    networks:
+      - iris-network
+
+networks:
+  iris-network:
+    driver: bridge
