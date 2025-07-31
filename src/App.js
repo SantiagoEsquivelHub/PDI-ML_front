@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Flower, Activity, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 
-// Cambiamos la URL base para apuntar al puerto 8000
-const API_BASE_URL = 'http://localhost:8000';
+// Usar directamente la URL del servidor API
+const API_BASE_URL = 'http://3.13.70.131:8000';
 
 const App = () => {
   const [apiHealth, setApiHealth] = useState('unknown');
@@ -63,7 +63,6 @@ const App = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
         },
         body: JSON.stringify(requestData)
       });
