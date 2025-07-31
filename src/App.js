@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Flower, Activity, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 
 // Usar directamente la URL del servidor API
-const API_BASE_URL = 'http://3.13.70.131:8000';
+const API_BASE_URL = 'https://3.13.70.131';
 
 const App = () => {
   const [apiHealth, setApiHealth] = useState('unknown');
