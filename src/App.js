@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Flower, Activity, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 
 // URLs de los servidores API
-const API_BASE_URL = 'https://3.148.67.147';
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? '/api' // Use Vercel proxy in production
+  : 'https://3.149.156.68'; // Direct URL in development
 
 const App = () => {
   const [apiHealth, setApiHealth] = useState('unknown');
@@ -35,13 +37,19 @@ const App = () => {
 
   const checkAPIHealth = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/health`);
+      const response = await fetch(`${API_BASE_URL}/health`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
       if (response.ok) {
         setApiHealth('healthy');
       } else {
         setApiHealth('unhealthy');
       }
     } catch (error) {
+      console.error('Health check error:', error);
       setApiHealth('offline');
     }
   };
