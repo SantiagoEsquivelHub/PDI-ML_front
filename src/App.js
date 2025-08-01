@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Flower, Activity, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 
-// Usar directamente la URL del servidor API
-const API_BASE_URL = 'https://3.13.70.131';
+// URLs de los servidores API
+const API_BASE_URL = 'https://3.148.67.147';
 
 const App = () => {
   const [apiHealth, setApiHealth] = useState('unknown');
@@ -14,9 +14,19 @@ const App = () => {
     petal_length: '',
     petal_width: ''
   });
+  
+  // Estados para resultados secuenciales
   const [irisResult, setIrisResult] = useState(null);
   const [irisLoading, setIrisLoading] = useState(false);
   const [irisError, setIrisError] = useState('');
+  
+  // Estados para benchmark
+  const [benchmarkData, setBenchmarkData] = useState(null);
+  const [benchmarkLoading, setBenchmarkLoading] = useState(false);
+  const [benchmarkError, setBenchmarkError] = useState('');
+  
+  // Estado para comparación
+  const [isComparing, setIsComparing] = useState(false);
 
   // Verificar salud de la API al cargar
   useEffect(() => {
@@ -45,39 +55,70 @@ const App = () => {
     }));
   };
 
-  // Predecir Iris
-  const predictIris = async () => {
+  // Comparar ambos modelos simultáneamente
+  const compareModels = async () => {
+    setIsComparing(true);
     setIrisLoading(true);
+    setBenchmarkLoading(true);
     setIrisError('');
+    setBenchmarkError('');
     setIrisResult(null);
+    setBenchmarkData(null);
 
-    try {
-      const requestData = {
-        sepal_length: parseFloat(irisData.sepal_length),
-        sepal_width: parseFloat(irisData.sepal_width),
-        petal_length: parseFloat(irisData.petal_length),
-        petal_width: parseFloat(irisData.petal_width)
-      };
+    const requestData = {
+      sepal_length: parseFloat(irisData.sepal_length),
+      sepal_width: parseFloat(irisData.sepal_width),
+      petal_length: parseFloat(irisData.petal_length),
+      petal_width: parseFloat(irisData.petal_width)
+    };
 
-      const response = await fetch(`${API_BASE_URL}/predict/iris`, {
+    // Ejecutar ambas predicciones en paralelo
+    const [sequentialResponse, benchmarkResponse] = await Promise.allSettled([
+      // Predicción secuencial
+      fetch(`${API_BASE_URL}/predict/iris`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestData)
-      });
+      }).then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Error secuencial: ${response.status}`);
+        }
+        return await response.json();
+      }),
+      
+      // Benchmark de performance
+      fetch(`${API_BASE_URL}/benchmark/results`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      }).then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Error benchmark: ${response.status}`);
+        }
+        return await response.json();
+      })
+    ]);
 
-      if (!response.ok) {
-        throw new Error(`Error: ${response.status}`);
-      }
-
-      const result = await response.json();
-      setIrisResult(result);
-    } catch (error) {
-      setIrisError(`Error al predecir: ${error.message}`);
-    } finally {
-      setIrisLoading(false);
+    // Procesar resultado secuencial
+    if (sequentialResponse.status === 'fulfilled') {
+      setIrisResult(sequentialResponse.value);
+    } else {
+      setIrisError(`Error al predecir (secuencial): ${sequentialResponse.reason.message}`);
     }
+    setIrisLoading(false);
+
+    // Procesar resultado benchmark
+    if (benchmarkResponse.status === 'fulfilled') {
+      setBenchmarkData(benchmarkResponse.value);
+    } else {
+      setBenchmarkError(`Error al obtener benchmark: ${benchmarkResponse.reason.message}`);
+    }
+    setBenchmarkLoading(false);
+
+    setIsComparing(false);
   };
 
   // Limpiar formulario
@@ -90,6 +131,8 @@ const App = () => {
     });
     setIrisResult(null);
     setIrisError('');
+    setBenchmarkData(null);
+    setBenchmarkError('');
   };
 
   // Cargar datos de ejemplo
@@ -222,17 +265,17 @@ const App = () => {
             {/* Botones de acción */}
             <div className="flex gap-3 mt-6">
               <button
-                onClick={predictIris}
-                disabled={irisLoading || apiHealth !== 'healthy' || !irisData.sepal_length || !irisData.sepal_width || !irisData.petal_length || !irisData.petal_width}
+                onClick={compareModels}
+                disabled={isComparing || apiHealth !== 'healthy' || !irisData.sepal_length || !irisData.sepal_width || !irisData.petal_length || !irisData.petal_width}
                 className="flex-1 bg-purple-600 text-white py-3 px-4 rounded-md hover:bg-purple-700 disabled:bg-gray-400 transition-colors flex items-center justify-center gap-2 font-medium"
               >
-                {irisLoading ? (
+                {isComparing ? (
                   <>
                     <Loader className="w-4 h-4 animate-spin" />
-                    Clasificando...
+                    Comparando Modelos...
                   </>
                 ) : (
-                  'Clasificar Especie'
+                  'Clasificar y Comparar Performance'
                 )}
               </button>
             </div>
@@ -256,82 +299,248 @@ const App = () => {
 
         {/* Resultados */}
         <div>
-          <h2 className="text-xl font-semibold mb-6">Resultado de Clasificación</h2>
-          
-          {irisError && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-md mb-4">
-              <div className="flex items-center gap-2 text-red-700">
-                <AlertCircle className="w-4 h-4" />
-                {irisError}
+          {/* Resultado de Clasificación */}
+          <div>
+            <h2 className="text-xl font-semibold mb-6">Resultado de Clasificación</h2>
+            
+            {irisError && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-md mb-4">
+                <div className="flex items-center gap-2 text-red-700">
+                  <AlertCircle className="w-4 h-4" />
+                  {irisError}
+                </div>
               </div>
+            )}
+            
+            {irisResult && (
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+                <div className="text-center mb-4">
+                  <h3 className="text-2xl font-bold text-blue-800 mb-2">
+                    {irisResult.predicted_species}
+                  </h3>
+                  <div className="inline-block bg-blue-100 px-3 py-1 rounded-full">
+                    <span className="text-blue-800 font-medium">
+                      Confianza: {(irisResult.confidence * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between items-center p-2 bg-white rounded">
+                    <span className="font-medium">Clase predicha:</span>
+                    <span>{irisResult.predicted_class}</span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center p-2 bg-white rounded">
+                    <span className="font-medium">Timestamp:</span>
+                    <span>{new Date(irisResult.timestamp).toLocaleString()}</span>
+                  </div>
+                  
+                  {irisResult.all_predictions && (
+                    <div className="p-3 bg-white rounded">
+                      <div className="font-medium mb-2">Probabilidades por especie:</div>
+                      <div className="space-y-1">
+                        {irisResult.all_predictions.map((pred, idx) => {
+                          const species = ['Setosa', 'Versicolor', 'Virginica'][idx] || `Especie ${idx}`;
+                          return (
+                            <div key={idx} className="flex justify-between text-xs">
+                              <span>{species}:</span>
+                              <span className={idx === irisResult.predicted_class ? 'font-bold text-blue-700' : ''}>
+                                {(pred * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="p-3 bg-white rounded">
+                    <div className="font-medium mb-2">Datos utilizados:</div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>Sép. L: {irisData.sepal_length} cm</div>
+                      <div>Sép. A: {irisData.sepal_width} cm</div>
+                      <div>Pét. L: {irisData.petal_length} cm</div>
+                      <div>Pét. A: {irisData.petal_width} cm</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!irisResult && !irisError && !irisLoading && (
+              <div className="text-center p-8 border-2 border-dashed border-gray-300 rounded-lg">
+                <Flower className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-gray-500">
+                  Introduce las medidas de la flor para obtener la clasificación
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Benchmark Section */}
+      <div className="mt-12">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">
+          Benchmark: Secuencial vs Paralelo
+        </h2>
+        
+        {benchmarkError && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-md mb-6">
+            <div className="flex items-center gap-2 text-red-700">
+              <AlertCircle className="w-4 h-4" />
+              {benchmarkError}
             </div>
-          )}
-          
-          {irisResult && (
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg p-6">
-              <div className="text-center mb-4">
-                <h3 className="text-2xl font-bold text-green-800 mb-2">
-                  {irisResult.predicted_species}
-                </h3>
-                <div className="inline-block bg-green-100 px-3 py-1 rounded-full">
-                  <span className="text-green-800 font-medium">
-                    Confianza: {(irisResult.confidence * 100).toFixed(1)}%
-                  </span>
+          </div>
+        )}
+
+        {benchmarkLoading && (
+          <div className="text-center p-8">
+            <Loader className="w-8 h-8 animate-spin mx-auto mb-3 text-purple-600" />
+            <p className="text-gray-500">Obteniendo datos de benchmark...</p>
+          </div>
+        )}
+
+        {benchmarkData && (
+          <div className="space-y-6">
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg border border-purple-200">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-800">
+                    {benchmarkData.summary.speedup.toFixed(2)}x
+                  </div>
+                  <div className="text-sm text-purple-600">Speedup</div>
                 </div>
               </div>
               
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between items-center p-2 bg-white rounded">
-                  <span className="font-medium">Clase predicha:</span>
-                  <span>{irisResult.predicted_class}</span>
+              <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-800">
+                    {(benchmarkData.summary.efficiency * 100).toFixed(1)}%
+                  </div>
+                  <div className="text-sm text-green-600">Eficiencia</div>
                 </div>
-                
-                <div className="flex justify-between items-center p-2 bg-white rounded">
-                  <span className="font-medium">Timestamp:</span>
-                  <span>{new Date(irisResult.timestamp).toLocaleString()}</span>
+              </div>
+              
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-800">
+                    {benchmarkData.summary.cpu_cores_used}
+                  </div>
+                  <div className="text-sm text-blue-600">CPU Cores</div>
                 </div>
-                
-                {irisResult.all_predictions && (
-                  <div className="p-3 bg-white rounded">
-                    <div className="font-medium mb-2">Probabilidades por especie:</div>
-                    <div className="space-y-1">
-                      {irisResult.all_predictions.map((pred, idx) => {
-                        const species = ['Setosa', 'Versicolor', 'Virginica'][idx] || `Especie ${idx}`;
-                        return (
-                          <div key={idx} className="flex justify-between text-xs">
-                            <span>{species}:</span>
-                            <span className={idx === irisResult.predicted_class ? 'font-bold text-green-700' : ''}>
-                              {(pred * 100).toFixed(1)}%
+              </div>
+              
+              <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-lg border border-orange-200">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-orange-800">
+                    {benchmarkData.summary.time_saved.toFixed(2)}s
+                  </div>
+                  <div className="text-sm text-orange-600">Tiempo Ahorrado</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Comparison Table */}
+            <div className="grid lg:grid-cols-2 gap-6">
+              {/* Sequential Results */}
+              <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
+                <h3 className="text-lg font-semibold text-blue-800 mb-4">
+                  Procesamiento Secuencial
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="font-medium">Tiempo Total:</span>
+                    <span>{benchmarkData.sequential.total_time.toFixed(3)}s</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Memoria Usada:</span>
+                    <span>{benchmarkData.sequential.memory_used.toFixed(2)} MB</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">CPU Cores:</span>
+                    <span>{benchmarkData.sequential.cpu_count}</span>
+                  </div>
+                  
+                  <div className="mt-4">
+                    <div className="font-medium mb-2">Resultados por Modelo:</div>
+                    <div className="space-y-2">
+                      {benchmarkData.sequential.results.map((result, idx) => (
+                        <div key={idx} className="bg-white p-3 rounded text-sm">
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium">Modelo {result.model_id}</span>
+                            <span className="text-xs bg-blue-100 px-2 py-1 rounded">
+                              {result.training_time.toFixed(3)}s
                             </span>
                           </div>
-                        );
-                      })}
+                          <div className="text-xs text-gray-600 mt-1">
+                            Estimadores: {result.params.n_estimators}, Profundidad: {result.params.max_depth}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                )}
-                
-                <div className="p-3 bg-white rounded">
-                  <div className="font-medium mb-2">Datos utilizados:</div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>Sép. L: {irisData.sepal_length} cm</div>
-                    <div>Sép. A: {irisData.sepal_width} cm</div>
-                    <div>Pét. L: {irisData.petal_length} cm</div>
-                    <div>Pét. A: {irisData.petal_width} cm</div>
+                </div>
+              </div>
+
+              {/* Parallel Results */}
+              <div className="bg-green-50 p-6 rounded-lg border border-green-200">
+                <h3 className="text-lg font-semibold text-green-800 mb-4">
+                  Procesamiento Paralelo
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="font-medium">Tiempo Total:</span>
+                    <span>{benchmarkData.parallel.total_time.toFixed(3)}s</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Memoria Usada:</span>
+                    <span>{benchmarkData.parallel.memory_used.toFixed(2)} MB</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">CPU Cores:</span>
+                    <span>{benchmarkData.parallel.cpu_count}</span>
+                  </div>
+                  
+                  <div className="mt-4">
+                    <div className="font-medium mb-2">Resultados por Modelo:</div>
+                    <div className="space-y-2">
+                      {benchmarkData.parallel.results.map((result, idx) => (
+                        <div key={idx} className="bg-white p-3 rounded text-sm">
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium">Modelo {result.model_id}</span>
+                            <span className="text-xs bg-green-100 px-2 py-1 rounded">
+                              {result.training_time.toFixed(3)}s
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            Estimadores: {result.params.n_estimators}, Profundidad: {result.params.max_depth}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          )}
 
-          {!irisResult && !irisError && !irisLoading && (
-            <div className="text-center p-8 border-2 border-dashed border-gray-300 rounded-lg">
-              <Flower className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-500">
-                Introduce las medidas de la flor para obtener la clasificación
-              </p>
+            {/* Timestamp */}
+            <div className="text-center text-sm text-gray-500">
+              Benchmark realizado: {benchmarkData.timestamp}
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {!benchmarkData && !benchmarkError && !benchmarkLoading && (
+          <div className="text-center p-8 border-2 border-dashed border-gray-300 rounded-lg">
+            <Activity className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+            <p className="text-gray-500">
+              Haz clic en "Clasificar y Comparar Performance" para ver el benchmark
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Información adicional */}
